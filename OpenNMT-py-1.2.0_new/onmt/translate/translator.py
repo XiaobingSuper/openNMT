@@ -8,9 +8,7 @@ import numpy as np
 from itertools import count, zip_longest
 
 import torch
-from torch import fx
-from torch.profiler import profile, record_function, ProfilerActivity
-#import intel_extension_for_pytorch
+torch.manual_seed(10000)
 
 import onmt.model_builder
 import onmt.inputters as inputters
@@ -21,7 +19,6 @@ from onmt.utils.misc import tile, set_random_seed, report_matrix
 from onmt.utils.alignment import extract_alignment, build_align_pharaoh
 from onmt.modules.copy_generator import collapse_copy_scores
 
-torch.manual_seed(1000)
 
 def build_translator(opt, report_score=True, logger=None, out_file=None):
     if out_file is None:
@@ -30,8 +27,6 @@ def build_translator(opt, report_score=True, logger=None, out_file=None):
     load_test_model = onmt.decoders.ensemble.load_test_model \
         if len(opt.models) > 1 else onmt.model_builder.load_test_model
     fields, model, model_opt = load_test_model(opt)
-    print("22222222222222222222222")
-    #print(model)
     torch.quantization.quantize_dynamic(model, inplace=True)
     scorer = onmt.translate.GNMTGlobalScorer.from_opt(opt)
 
@@ -361,21 +356,21 @@ class Translator(object):
         all_scores = []
         all_predictions = []
 
-        i = 0
         start_time = time.time()
+
+        i = 0
         '''
         with torch.autograd.profiler.profile() as p:
-        #with profile(activities=[ProfilerActivity.CPU]) as p:
             for batch in data_iter:
-                print("here")
                 i = i + 1
                 if i == 100:
                     break
+                print("here .......................%d"%(i))
                 batch_data = self.translate_batch(
                     batch, data.src_vocabs, attn_debug
                 )
                 translations = xlation_builder.from_batch(batch_data)
-    
+
                 for trans in translations:
                     all_scores += [trans.pred_scores[:self.n_best]]
                     pred_score_total += trans.pred_scores[0]
@@ -383,7 +378,7 @@ class Translator(object):
                     if tgt is not None:
                         gold_score_total += trans.gold_score
                         gold_words_total += len(trans.gold_sent) + 1
-    
+
                     n_best_preds = [" ".join(pred)
                                     for pred in trans.pred_sents[:self.n_best]]
                     if self.report_align:
@@ -397,7 +392,7 @@ class Translator(object):
                     all_predictions += [n_best_preds]
                     self.out_file.write('\n'.join(n_best_preds) + '\n')
                     self.out_file.flush()
-    
+
                     if self.verbose:
                         sent_number = next(counter)
                         output = trans.log(sent_number)
@@ -405,7 +400,7 @@ class Translator(object):
                             self.logger.info(output)
                         else:
                             os.write(1, output.encode('utf-8'))
-    
+
                     if attn_debug:
                         preds = trans.pred_sents[0]
                         preds.append('</s>')
@@ -419,7 +414,7 @@ class Translator(object):
                             self.logger.info(output)
                         else:
                             os.write(1, output.encode('utf-8'))
-    
+
                     if align_debug:
                         tgts = trans.pred_sents[0]
                         align = trans.word_aligns[0].tolist()
@@ -435,12 +430,11 @@ class Translator(object):
 
         print(p.key_averages().table(sort_by="self_cpu_time_total", row_limit=-1))
         '''
-        print("begin inference..............................")
         for batch in data_iter:
-            print("here................................%d"%(i))
             i = i + 1
-            if i == 100:
-                break
+            #if i == 100:
+            #    break
+            print("here .......................%d"%(i))
             batch_data = self.translate_batch(
                 batch, data.src_vocabs, attn_debug
             )
@@ -502,6 +496,7 @@ class Translator(object):
                         self.logger.info(output)
                     else:
                         os.write(1, output.encode('utf-8'))
+
         end_time = time.time()
 
         if self.report_score:

@@ -66,8 +66,9 @@ class MultiHeadedAttention(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
         self.dropout = nn.Dropout(dropout)
         self.final_linear = nn.Linear(model_dim, model_dim)
-        
+
         self.max_relative_positions = max_relative_positions
+
         if max_relative_positions > 0:
             vocab_size = max_relative_positions * 2 + 1
             self.relative_positions_embeddings = nn.Embedding(
@@ -148,25 +149,19 @@ class MultiHeadedAttention(nn.Module):
             elif attn_type == "context":
                 query = self.linear_query(query)
                 if layer_cache["memory_keys"] is None:
-                    value = self.linear_values(value)
-
-                    self.linear_keys(key)
-                    
+                    key, value = self.linear_keys(key),\
+                                 self.linear_values(value)
                     key = shape(key)
                     value = shape(value)
                 else:
                     key, value = layer_cache["memory_keys"],\
                                layer_cache["memory_values"]
-                
                 layer_cache["memory_keys"] = key
                 layer_cache["memory_values"] = value
         else:
             key = self.linear_keys(key)
-          
             value = self.linear_values(value)
-          
             query = self.linear_query(query)
-
             key = shape(key)
             value = shape(value)
 

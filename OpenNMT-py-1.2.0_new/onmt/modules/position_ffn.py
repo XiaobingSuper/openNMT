@@ -1,7 +1,6 @@
 """Position feed-forward network from "Attention is All You Need"."""
 
 import torch.nn as nn
-import torch
 
 
 class PositionwiseFeedForward(nn.Module):
@@ -33,10 +32,7 @@ class PositionwiseFeedForward(nn.Module):
             (FloatTensor): Output ``(batch_size, input_len, model_dim)``.
         """
 
-        inter = self.layer_norm(x)
-        inter = self.w_1(inter)
-        inter = self.relu(inter)
-        inter = self.dropout_1(inter)
+        inter = self.dropout_1(self.relu(self.w_1(self.layer_norm(x))))
         output = self.dropout_2(self.w_2(inter))
         return output + x
 
