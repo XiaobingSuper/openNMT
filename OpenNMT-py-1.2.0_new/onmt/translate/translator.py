@@ -27,7 +27,8 @@ def build_translator(opt, report_score=True, logger=None, out_file=None):
     load_test_model = onmt.decoders.ensemble.load_test_model \
         if len(opt.models) > 1 else onmt.model_builder.load_test_model
     fields, model, model_opt = load_test_model(opt)
-    torch.quantization.quantize_dynamic(model, inplace=True)
+    torch.quantization.quantize_dynamic(model.eval(), inplace=True)
+    print("begin runining..................")
     scorer = onmt.translate.GNMTGlobalScorer.from_opt(opt)
 
     translator = Translator.from_opt(
@@ -432,9 +433,14 @@ class Translator(object):
         '''
         for batch in data_iter:
             i = i + 1
-            #if i == 100:
-            #    break
+            if i == 50:
+                break
             print("here .......................%d"%(i))
+            '''
+            with torch.cpu.amp.autocast():
+                batch_data = self.translate_batch(
+                    batch, data.src_vocabs, attn_debug)
+            '''
             batch_data = self.translate_batch(
                 batch, data.src_vocabs, attn_debug
             )

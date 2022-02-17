@@ -9,7 +9,7 @@ from onmt.decoders.decoder import DecoderBase
 from onmt.modules import MultiHeadedAttention, AverageAttention
 from onmt.modules.position_ffn import PositionwiseFeedForward
 from onmt.utils.misc import sequence_mask
-
+import intel_extension_for_pytorch
 
 class TransformerDecoderLayer(nn.Module):
     """Transformer Decoder layer block in Pre-Norm style.
@@ -159,9 +159,16 @@ class TransformerDecoderLayer(nn.Module):
             query, _ = self.self_attn(input_norm, mask=dec_mask,
                                       layer_cache=layer_cache, step=step)
 
-        query = self.drop(query) + inputs
+        query = self.drop(query)
+        if self.training:
+            query = query + inputs
+            query_norm = self.layer_norm_2(query)
+        else:
+            #query = query + inputs
+            #query_norm = self.layer_norm_2(query)
+            # ipex fused op.
+            query_norm = torch.ops.ipex.add_layernorm(query, inputs, 1, self.layer_norm_2.normalized_shape, self.layer_norm_2.weight, self.layer_norm_2.bias, self.layer_norm_2.eps, False)
 
-        query_norm = self.layer_norm_2(query)
         mid, attns = self.context_attn(memory_bank, memory_bank, query_norm,
                                        mask=src_pad_mask,
                                        layer_cache=layer_cache,

@@ -3,6 +3,8 @@ import math
 import torch
 import torch.nn as nn
 
+import intel_extension_for_pytorch
+
 from onmt.utils.misc import generate_relative_positions_matrix,\
                             relative_matmul
 # from onmt.utils.misc import aeq
@@ -183,23 +185,50 @@ class MultiHeadedAttention(nn.Module):
         key_len = key.size(2)
         query_len = query.size(2)
 
-        # 2) Calculate and scale scores.
-        query = query / math.sqrt(dim_per_head)
-        # batch x num_heads x query_len x key_len
-        query_key = torch.matmul(query, key.transpose(2, 3))
-
         if self.max_relative_positions > 0 and attn_type == "self":
+            # 2) Calculate and scale scores.
+            query = query / math.sqrt(dim_per_head)
+            # batch x num_heads x query_len x key_len
+            query_key = torch.matmul(query, key.transpose(2, 3))
+
             scores = query_key + relative_matmul(query, relations_keys, True)
+            scores = scores.float()
+
+            if mask is not None:
+                mask = mask.unsqueeze(1)  # [B, 1, 1, T_values]
+                scores = scores.masked_fill(mask, -1e18)
+            # 3) Apply attention dropout and compute context vectors.
+            attn = self.softmax(scores).to(query.dtype)
+
         else:
-            scores = query_key
-        scores = scores.float()
+            if mask is None:
+                # 2) Calculate and scale scores.
+                query = query / math.sqrt(dim_per_head)
+                # batch x num_heads x query_len x key_len
+                query_key = torch.matmul(query, key.transpose(2, 3))
+                scores = query_key
+                scores = scores.float()
+                attn = self.softmax(scores).to(query.dtype)
 
-        if mask is not None:
-            mask = mask.unsqueeze(1)  # [B, 1, 1, T_values]
-            scores = scores.masked_fill(mask, -1e18)
+            if mask is not None:
+                # ipex fused op
+                attn = torch.ops.ipex.distil_mha_scores_calc(query, key, mask, mask.size(), 2, 3, -1e18, math.sqrt(dim_per_head), 3, query.dtype)
+                '''
+                query = query / math.sqrt(dim_per_head)
+                # batch x num_heads x query_len x key_len
 
-        # 3) Apply attention dropout and compute context vectors.
-        attn = self.softmax(scores).to(query.dtype)
+                query_key = torch.matmul(query, key.transpose(2, 3))
+
+                #scores = query_key / math.sqrt(dim_per_head)
+
+                scores = query_key
+                scores = scores.float()
+
+                mask = mask.unsqueeze(1)  # [B, 1, 1, T_values]
+                scores = scores.masked_fill(mask, -1e18)
+                attn = self.softmax(scores).to(query.dtype)
+                '''
+
         drop_attn = self.dropout(attn)
 
         context_original = torch.matmul(drop_attn, value)
