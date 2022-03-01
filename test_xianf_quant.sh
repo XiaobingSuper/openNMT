@@ -5,7 +5,7 @@ export KMP_SETTING="KMP_AFFINITY=granularity=fine,compact,1,0"
 export KMP_BLOCKTIME=1
 
 #taskset -c 0-20 python3 /home/ubuntu/opennmt/OpenNMT-py-1.2.0/translate.py \
-taskset -c 4-7 python3 /home/xiaobing/Download/tencent_cloud/opennmt/OpenNMT-py-1.2.0_new/translate.py \
+numactl --physcpubind=0-3 --membind=0 python  /home/xiaobing/Downloads/openNMT/OpenNMT-py-1.2.0_new/translate.py \
     --model ./checkpoint_step_250000.pt \
     --src ./test_data/test.en \
     --output ./translated_xianf \
