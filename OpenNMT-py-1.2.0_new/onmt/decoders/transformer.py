@@ -164,10 +164,10 @@ class TransformerDecoderLayer(nn.Module):
             query = query + inputs
             query_norm = self.layer_norm_2(query)
         else:
-            #query = query + inputs
-            #query_norm = self.layer_norm_2(query)
+            query = query + inputs
+            query_norm = self.layer_norm_2(query)
             # ipex fused op.
-            query_norm = torch.ops.ipex.add_layernorm(query, inputs, 1, self.layer_norm_2.normalized_shape, self.layer_norm_2.weight, self.layer_norm_2.bias, self.layer_norm_2.eps, False)
+            #query_norm = torch.ops.ipex.add_layernorm(query, inputs, 1, self.layer_norm_2.normalized_shape, self.layer_norm_2.weight, self.layer_norm_2.bias, self.layer_norm_2.eps, False)
 
         mid, attns = self.context_attn(memory_bank, memory_bank, query_norm,
                                        mask=src_pad_mask,

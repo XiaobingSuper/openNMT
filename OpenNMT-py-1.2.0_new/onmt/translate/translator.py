@@ -8,6 +8,7 @@ import numpy as np
 from itertools import count, zip_longest
 
 import torch
+import intel_extension_for_pytorch as ipex
 torch.manual_seed(10000)
 
 import onmt.model_builder
@@ -27,7 +28,32 @@ def build_translator(opt, report_score=True, logger=None, out_file=None):
     load_test_model = onmt.decoders.ensemble.load_test_model \
         if len(opt.models) > 1 else onmt.model_builder.load_test_model
     fields, model, model_opt = load_test_model(opt)
-    torch.quantization.quantize_dynamic(model.eval(), inplace=True)
+
+    # fuse_qkv
+    for i in range(20):
+        w1 = model.encoder.transformer[i].self_attn.linear_query.weight
+        w2 = model.encoder.transformer[i].self_attn.linear_keys.weight
+        w3 = model.encoder.transformer[i].self_attn.linear_values.weight
+        model.encoder.transformer[i].self_attn.linear_cat.weight.data = torch.cat([w1, w2, w3])
+        if model.encoder.transformer[i].self_attn.linear_query.bias is not None:
+            b1 = model.encoder.transformer[i].self_attn.linear_query.bias
+            b2 = model.encoder.transformer[i].self_attn.linear_keys.bias
+            b3 = model.encoder.transformer[i].self_attn.linear_values.bias
+            model.encoder.transformer[i].self_attn.linear_cat.bias.data = torch.cat([b1, b2, b3])
+    
+    for i in range(3):
+        w1 = model.decoder.transformer_layers[i].self_attn.linear_query.weight
+        w2 = model.decoder.transformer_layers[i].self_attn.linear_keys.weight
+        w3 = model.decoder.transformer_layers[i].self_attn.linear_values.weight
+        model.decoder.transformer_layers[i].self_attn.linear_cat.weight.data = torch.cat([w1, w2, w3])
+        if model.decoder.transformer_layers[i].self_attn.linear_query.bias is not None:
+            b1 = model.decoder.transformer_layers[i].self_attn.linear_query.bias
+            b2 = model.decoder.transformer_layers[i].self_attn.linear_keys.bias
+            b3 = model.decoder.transformer_layers[i].self_attn.linear_values.bias
+            model.decoder.transformer_layers[i].self_attn.linear_cat.bias.data = torch.cat([b1, b2, b3])
+
+    #torch.quantization.quantize_dynamic(model.eval(), inplace=True)
+    model = ipex.optimize(model, dtype=torch.bfloat16)
     print("begin runining..................")
     scorer = onmt.translate.GNMTGlobalScorer.from_opt(opt)
 
@@ -360,17 +386,17 @@ class Translator(object):
         start_time = time.time()
 
         i = 0
-        '''
         with torch.autograd.profiler.profile() as p:
             for batch in data_iter:
                 i = i + 1
-                if i == 100:
+                if i == 50:
                     break
                 print("here .......................%d"%(i))
-                batch_data = self.translate_batch(
-                    batch, data.src_vocabs, attn_debug
-                )
-                translations = xlation_builder.from_batch(batch_data)
+                with torch.cpu.amp.autocast():
+                    batch_data = self.translate_batch(
+                        batch, data.src_vocabs, attn_debug
+                    )
+                    translations = xlation_builder.from_batch(batch_data)
 
                 for trans in translations:
                     all_scores += [trans.pred_scores[:self.n_best]]
@@ -429,23 +455,23 @@ class Translator(object):
                         else:
                             os.write(1, output.encode('utf-8'))
 
+        p.export_chrome_trace("trace.json")
         print(p.key_averages().table(sort_by="self_cpu_time_total", row_limit=-1))
         '''
         for batch in data_iter:
             i = i + 1
-            if i == 50:
-                break
+            #if i == 50:
+            #    break
             print("here .......................%d"%(i))
-            '''
+            
             with torch.cpu.amp.autocast():
                 batch_data = self.translate_batch(
                     batch, data.src_vocabs, attn_debug)
-            '''
-            batch_data = self.translate_batch(
-                batch, data.src_vocabs, attn_debug
-            )
-            translations = xlation_builder.from_batch(batch_data)
-
+                translations = xlation_builder.from_batch(batch_data)
+            #batch_data = self.translate_batch(
+            #    batch, data.src_vocabs, attn_debug
+            #)
+            #translations = xlation_builder.from_batch(batch_data)
             for trans in translations:
                 all_scores += [trans.pred_scores[:self.n_best]]
                 pred_score_total += trans.pred_scores[0]
@@ -503,6 +529,7 @@ class Translator(object):
                     else:
                         os.write(1, output.encode('utf-8'))
 
+        '''
         end_time = time.time()
 
         if self.report_score:

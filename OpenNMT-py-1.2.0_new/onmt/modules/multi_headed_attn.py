@@ -65,6 +65,7 @@ class MultiHeadedAttention(nn.Module):
                                        head_count * self.dim_per_head)
         self.linear_query = nn.Linear(model_dim,
                                       head_count * self.dim_per_head)
+        self.linear_cat = nn.Linear(model_dim, head_count * self.dim_per_head * 3)
         self.softmax = nn.Softmax(dim=-1)
         self.dropout = nn.Dropout(dropout)
         self.final_linear = nn.Linear(model_dim, model_dim)
@@ -133,9 +134,16 @@ class MultiHeadedAttention(nn.Module):
         # 1) Project key, value, and query.
         if layer_cache is not None:
             if attn_type == "self":
+                '''
                 query, key, value = self.linear_query(query),\
                                     self.linear_keys(query),\
                                     self.linear_values(query)
+                '''
+                output = self.linear_cat(query)
+                query = output[:, :, 0:head_count * self.dim_per_head]
+                key = output[:, :, head_count * self.dim_per_head : head_count * self.dim_per_head * 2]
+                value = output[:, :, head_count * self.dim_per_head * 2 : head_count * self.dim_per_head * 3]
+
                 key = shape(key)
                 value = shape(value)
                 if layer_cache["self_keys"] is not None:
@@ -161,9 +169,16 @@ class MultiHeadedAttention(nn.Module):
                 layer_cache["memory_keys"] = key
                 layer_cache["memory_values"] = value
         else:
-            key = self.linear_keys(key)
-            value = self.linear_values(value)
-            query = self.linear_query(query)
+            if (key.data_ptr() == value.data_ptr() and key.data_ptr() == query.data_ptr() 
+                    and key.size() == value.size() and key.size() == query.size()):
+                output = self.linear_cat(query)
+                query = output[:, :, 0:head_count * self.dim_per_head]
+                key = output[:, :, head_count * self.dim_per_head : head_count * self.dim_per_head * 2]
+                value = output[:, :, head_count * self.dim_per_head * 2 : head_count * self.dim_per_head * 3]
+            else:
+                key = self.linear_keys(key)
+                value = self.linear_values(value)
+                query = self.linear_query(query)
             key = shape(key)
             value = shape(value)
 
@@ -210,10 +225,9 @@ class MultiHeadedAttention(nn.Module):
                 scores = scores.float()
                 attn = self.softmax(scores).to(query.dtype)
 
-            if mask is not None:
+            else:
                 # ipex fused op
-                attn = torch.ops.ipex.distil_mha_scores_calc(query, key, mask, mask.size(), 2, 3, -1e18, math.sqrt(dim_per_head), 3, query.dtype)
-                '''
+                #attn = torch.ops.ipex.distil_mha_scores_calc(query, key, mask, mask.size(), 2, 3, -1e18, math.sqrt(dim_per_head), 3, query.dtype)
                 query = query / math.sqrt(dim_per_head)
                 # batch x num_heads x query_len x key_len
 
@@ -227,7 +241,6 @@ class MultiHeadedAttention(nn.Module):
                 mask = mask.unsqueeze(1)  # [B, 1, 1, T_values]
                 scores = scores.masked_fill(mask, -1e18)
                 attn = self.softmax(scores).to(query.dtype)
-                '''
 
         drop_attn = self.dropout(attn)
 
