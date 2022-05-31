@@ -9,7 +9,7 @@ from onmt.decoders.decoder import DecoderBase
 from onmt.modules import MultiHeadedAttention, AverageAttention
 from onmt.modules.position_ffn import PositionwiseFeedForward
 from onmt.utils.misc import sequence_mask
-import intel_extension_for_pytorch
+#import intel_extension_for_pytorch
 
 class TransformerDecoderLayer(nn.Module):
     """Transformer Decoder layer block in Pre-Norm style.

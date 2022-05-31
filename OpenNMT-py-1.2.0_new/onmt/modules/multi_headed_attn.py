@@ -3,7 +3,7 @@ import math
 import torch
 import torch.nn as nn
 
-import intel_extension_for_pytorch
+#import intel_extension_for_pytorch
 
 from onmt.utils.misc import generate_relative_positions_matrix,\
                             relative_matmul
