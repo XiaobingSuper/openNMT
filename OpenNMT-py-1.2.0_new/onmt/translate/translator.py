@@ -52,8 +52,8 @@ def build_translator(opt, report_score=True, logger=None, out_file=None):
             b3 = model.decoder.transformer_layers[i].self_attn.linear_values.bias
             model.decoder.transformer_layers[i].self_attn.linear_cat.bias.data = torch.cat([b1, b2, b3])
 
-    #torch.quantization.quantize_dynamic(model.eval(), inplace=True)
-    model = ipex.optimize(model, dtype=torch.bfloat16)
+    torch.quantization.quantize_dynamic(model.eval(), inplace=True)
+    #model = ipex.optimize(model, dtype=torch.bfloat16)
     print("begin runining..................")
     scorer = onmt.translate.GNMTGlobalScorer.from_opt(opt)
 
@@ -386,6 +386,7 @@ class Translator(object):
         start_time = time.time()
 
         i = 0
+        '''
         with torch.autograd.profiler.profile() as p:
             for batch in data_iter:
                 i = i + 1
@@ -464,14 +465,14 @@ class Translator(object):
             #    break
             print("here .......................%d"%(i))
             
-            with torch.cpu.amp.autocast():
-                batch_data = self.translate_batch(
-                    batch, data.src_vocabs, attn_debug)
-                translations = xlation_builder.from_batch(batch_data)
-            #batch_data = self.translate_batch(
-            #    batch, data.src_vocabs, attn_debug
-            #)
-            #translations = xlation_builder.from_batch(batch_data)
+            #with torch.cpu.amp.autocast():
+            #    batch_data = self.translate_batch(
+            #        batch, data.src_vocabs, attn_debug)
+            #    translations = xlation_builder.from_batch(batch_data)
+            batch_data = self.translate_batch(
+                batch, data.src_vocabs, attn_debug
+            )
+            translations = xlation_builder.from_batch(batch_data)
             for trans in translations:
                 all_scores += [trans.pred_scores[:self.n_best]]
                 pred_score_total += trans.pred_scores[0]
@@ -529,7 +530,6 @@ class Translator(object):
                     else:
                         os.write(1, output.encode('utf-8'))
 
-        '''
         end_time = time.time()
 
         if self.report_score:
